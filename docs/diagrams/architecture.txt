@@ -1,0 +1,23 @@
+Virux - component and data flow (text diagram)
+
+  Gestalt/OS events
+        |
+        v
+  [ViruxSensor]  (Swift system extension, M2, GATED on ES entitlement)
+        |  compact events over XPC (code-signing + audit-token checked)
+        v
+  [ViruxDaemon]  (privileged launchd daemon)
+        |
+        +--> [Detection engine]  hash / reputation / signatures / rules / score
+        |
+        +--> [Python worker]     on-demand enrichment over peer-checked socket
+        |
+        +--> [Forensics store]   SQLite WAL + retention
+        |
+        +--> [Response/Quarantine]  isolate / terminate / network filter (M5)
+        |
+        +--> [ViruxApp]  SwiftUI menu-bar + dashboard (reads store, on-demand)
+
+  [Sandbox]  Virtualization.framework disposable macOS guest, vsock agent (M4)
+
+  M1 substitute for the sensor:  eslogger -> adapter -> store

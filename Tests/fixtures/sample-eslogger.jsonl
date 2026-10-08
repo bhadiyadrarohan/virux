@@ -1,0 +1,6 @@
+{"event_type":"exec","time":"2026-10-08T10:00:00.100000Z","process":{"audit_token":{"pid":501,"ppid":1},"executable":{"path":"/bin/zsh"},"signing_id":"com.apple.zsh","team_id":null},"event":{"exec":{"image":{"path":"/bin/zsh"}}}}
+{"event_type":"open","time":"2026-10-08T10:00:00.200000Z","process":{"audit_token":{"pid":501,"ppid":1},"executable":{"path":"/bin/zsh"}},"event":{"open":{"file":{"path":"/Users/example/.zshrc"}}}}
+{"event_type":"close","time":"2026-10-08T10:00:00.300000Z","process":{"audit_token":{"pid":501,"ppid":1},"executable":{"path":"/bin/zsh"}},"event":{"close":{"target":{"path":"/Users/example/.zshrc"}}}}
+{"event_type":"exec","time":"2026-10-08T10:00:01.000000Z","process":{"audit_token":{"pid":777,"ppid":501},"executable":{"path":"/usr/bin/curl"},"signing_id":"com.apple.curl","team_id":null},"event":{"exec":{"image":{"path":"/usr/bin/curl"}}}}
+{"event_type":"open","time":"2026-10-08T10:00:01.100000Z","process":{"audit_token":{"pid":777,"ppid":501},"executable":{"path":"/usr/bin/curl"}},"event":{"open":{"file":{"path":"/etc/hosts"}}}}
+{"event_type":"something_new","time":"2026-10-08T10:00:02.000000Z","process":{"audit_token":{"pid":999}},"event":{"something_new":{}}}

@@ -1,0 +1,7 @@
+.build/
+.swiftpm/
+*.db
+*.db-wal
+*.db-shm
+*.health.json
+.DS_Store
