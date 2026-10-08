@@ -1,7 +1,7 @@
 # Virux
 
 Local-first Endpoint Detection and Response (EDR) for macOS.
-Personal, non-commercial project. Working name: Virux (V-I-R-U-X).
+Personal, non-commercial project. Working name: Virux.
 
 Virux protects the whole MacBook and its local/external assets. It runs
 independently of Hermes. Hermes is the development assistant, not a runtime
