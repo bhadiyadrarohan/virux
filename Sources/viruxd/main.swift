@@ -3,6 +3,7 @@ import Darwin
 import ViruxCore
 import ViruxSensor
 import ViruxIPC
+import ViruxDetect
 
 // viruxd: the Virux background agent skeleton (M1). It consumes telemetry from
 // an EventSource, stores it in the local SQLite store, and publishes a health
@@ -41,6 +42,7 @@ var source = "synth"
 var eventTypes = ["exec", "fork", "exit", "open", "close"]
 var seconds: Double? = nil
 var purgeDays = 90
+var detect = true
 
 var args = Array(CommandLine.arguments.dropFirst())
 var i = 0
@@ -56,6 +58,10 @@ while i < args.count {
         i += 1; if i < args.count { seconds = Double(args[i]) }
     case "--purge-days":
         i += 1; if i < args.count { purgeDays = Int(args[i]) ?? 90 }
+    case "--detect":
+        detect = true
+    case "--no-detect":
+        detect = false
     case "-h", "--help":
         print(usage); exit(0)
     default:
@@ -73,14 +79,17 @@ do {
 
 let healthPath = Health.defaultPath(dbPath: dbPath)
 let startedAt = Date()
+let pipeline = DetectionPipeline(store: store, hashExecImages: true)
 
 final class Counters {
     let lock = NSLock()
     var received = 0
     var stored = 0
     var errors = 0
+    var detections = 0
     var lastEventAt: Date?
     var lastError: String?
+    var lastDetectionTitle: String?
 }
 let counters = Counters()
 
@@ -110,14 +119,16 @@ func publishHealth(state: String, notes: [String] = []) {
         dbPath: dbPath,
         dbSizeBytes: store.dbSizeBytes(),
         rowCount: store.count(),
-        notes: notes
+        notes: notes,
+        detections: counters.detections,
+        lastDetectionTitle: counters.lastDetectionTitle
     )
     counters.lock.unlock()
     try? h.write(to: healthPath)
 }
 
 let notes = [
-    "M1 skeleton: telemetry capture only, no detection or response.",
+    "M3 observe-only: detections are recorded, nothing is enforced.",
     "source=\(src.name)"
 ]
 
@@ -127,8 +138,15 @@ src.start(onEvent: { event in
     counters.lastEventAt = event.timestamp
     counters.lock.unlock()
     do {
-        try store.insert(event)
+        var stored = event
+        stored.id = try store.insert(event)
         counters.lock.lock(); counters.stored += 1; counters.lock.unlock()
+        if detect, let det = pipeline.process(stored) {
+            counters.lock.lock()
+            counters.detections += 1
+            counters.lastDetectionTitle = det.title
+            counters.lock.unlock()
+        }
     } catch {
         counters.lock.lock()
         counters.errors += 1
@@ -158,4 +176,4 @@ while !gStop {
 
 src.stop()
 publishHealth(state: "stopped", notes: notes + ["shut down cleanly"])
-print("viruxd: stopped. db=\(dbPath) rows=\(store.count())")
+print("viruxd: stopped. db=\(dbPath) rows=\(store.count()) detections=\(store.countDetections())")

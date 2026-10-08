@@ -18,11 +18,14 @@ public struct Health: Codable, Sendable {
     public var dbSizeBytes: Int64
     public var rowCount: Int64
     public var notes: [String]
+    public var detections: Int?
+    public var lastDetectionTitle: String?
 
     public init(state: String, source: String, startedAt: Date, updatedAt: Date,
                 lastEventAt: Date?, eventsReceived: Int, eventsStored: Int,
                 insertErrors: Int, lastError: String?, dbPath: String,
-                dbSizeBytes: Int64, rowCount: Int64, notes: [String]) {
+                dbSizeBytes: Int64, rowCount: Int64, notes: [String],
+                detections: Int? = nil, lastDetectionTitle: String? = nil) {
         self.state = state
         self.source = source
         self.startedAt = startedAt
@@ -36,6 +39,8 @@ public struct Health: Codable, Sendable {
         self.dbSizeBytes = dbSizeBytes
         self.rowCount = rowCount
         self.notes = notes
+        self.detections = detections
+        self.lastDetectionTitle = lastDetectionTitle
     }
 
     public static func load(from path: String) -> Health? {

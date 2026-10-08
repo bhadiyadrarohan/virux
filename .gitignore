@@ -5,3 +5,8 @@
 *.db-shm
 *.health.json
 .DS_Store
+
+# Local-only, never publish (may contain identifiers, LAN details, case IDs)
+PRIVATE_NOTES.md
+*.local.md
+SECURITY.local.md

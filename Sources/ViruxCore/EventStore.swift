@@ -82,6 +82,23 @@ public final class EventStore {
         CREATE INDEX IF NOT EXISTS idx_events_kind ON events(kind);
         CREATE INDEX IF NOT EXISTS idx_events_hash ON events(file_hash);
         CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v TEXT);
+        CREATE TABLE IF NOT EXISTS detections (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          ts REAL NOT NULL,
+          title TEXT NOT NULL,
+          reason TEXT NOT NULL,
+          severity TEXT NOT NULL,
+          confidence TEXT NOT NULL,
+          evidence TEXT,
+          status TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_detections_ts ON detections(ts);
+        CREATE TABLE IF NOT EXISTS reputation_cache (
+          hash TEXT PRIMARY KEY,
+          verdict TEXT NOT NULL,
+          detail TEXT,
+          updated_at REAL NOT NULL
+        );
         """)
         try setMeta("schema_version", String(EventStore.schemaVersion))
     }
@@ -255,5 +272,97 @@ public final class EventStore {
         guard let s, let data = s.data(using: .utf8),
               let obj = try? JSONSerialization.jsonObject(with: data) as? [String: String] else { return [:] }
         return obj
+    }
+
+    // MARK: - Detections
+
+    @discardableResult
+    public func insertDetection(_ d: Detection) throws -> Int64 {
+        let evidence = (try? JSONSerialization.data(withJSONObject: d.evidenceEventIDs))
+            .flatMap { String(data: $0, encoding: .utf8) } ?? "[]"
+        let sql = """
+        INSERT INTO detections (ts,title,reason,severity,confidence,evidence,status)
+        VALUES (?,?,?,?,?,?,?);
+        """
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
+            throw StoreError.exec(lastError())
+        }
+        defer { sqlite3_finalize(stmt) }
+        sqlite3_bind_double(stmt, 1, d.timestamp.timeIntervalSince1970)
+        sqlite3_bind_text(stmt, 2, d.title, -1, SQL_TRANSIENT)
+        sqlite3_bind_text(stmt, 3, d.reason, -1, SQL_TRANSIENT)
+        sqlite3_bind_text(stmt, 4, d.severity.rawValue, -1, SQL_TRANSIENT)
+        sqlite3_bind_text(stmt, 5, d.confidence.rawValue, -1, SQL_TRANSIENT)
+        sqlite3_bind_text(stmt, 6, evidence, -1, SQL_TRANSIENT)
+        sqlite3_bind_text(stmt, 7, d.status.rawValue, -1, SQL_TRANSIENT)
+        guard sqlite3_step(stmt) == SQLITE_DONE else { throw StoreError.exec(lastError()) }
+        return sqlite3_last_insert_rowid(db)
+    }
+
+    public func recentDetections(limit: Int = 20) -> [Detection] {
+        let sql = """
+        SELECT id,ts,title,reason,severity,confidence,evidence,status
+        FROM detections ORDER BY id DESC LIMIT ?;
+        """
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return [] }
+        defer { sqlite3_finalize(stmt) }
+        sqlite3_bind_int(stmt, 1, Int32(limit))
+        var out: [Detection] = []
+        while sqlite3_step(stmt) == SQLITE_ROW {
+            let id = sqlite3_column_int64(stmt, 0)
+            let ts = Date(timeIntervalSince1970: sqlite3_column_double(stmt, 1))
+            let sev = Severity(rawValue: text(stmt, 4) ?? "") ?? .none
+            let conf = Confidence(rawValue: text(stmt, 5) ?? "") ?? .low
+            let status = Detection.Status(rawValue: text(stmt, 7) ?? "") ?? .observed
+            var evidence: [Int64] = []
+            if let s = text(stmt, 6), let data = s.data(using: .utf8),
+               let arr = try? JSONSerialization.jsonObject(with: data) as? [Int64] {
+                evidence = arr
+            }
+            out.append(Detection(id: id, timestamp: ts, title: text(stmt, 2) ?? "",
+                                 reason: text(stmt, 3) ?? "", severity: sev,
+                                 confidence: conf, evidenceEventIDs: evidence, status: status))
+        }
+        return out
+    }
+
+    public func countDetections() -> Int64 {
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, "SELECT COUNT(*) FROM detections;", -1, &stmt, nil) == SQLITE_OK else { return 0 }
+        defer { sqlite3_finalize(stmt) }
+        guard sqlite3_step(stmt) == SQLITE_ROW else { return 0 }
+        return sqlite3_column_int64(stmt, 0)
+    }
+
+    // MARK: - Reputation cache
+
+    public func setReputation(hash: String, verdict: String, detail: String?) throws {
+        let sql = """
+        INSERT INTO reputation_cache (hash,verdict,detail,updated_at) VALUES (?,?,?,?)
+        ON CONFLICT(hash) DO UPDATE SET verdict=excluded.verdict, detail=excluded.detail,
+          updated_at=excluded.updated_at;
+        """
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
+            throw StoreError.exec(lastError())
+        }
+        defer { sqlite3_finalize(stmt) }
+        sqlite3_bind_text(stmt, 1, hash, -1, SQL_TRANSIENT)
+        sqlite3_bind_text(stmt, 2, verdict, -1, SQL_TRANSIENT)
+        bindOptionalText(stmt, 3, detail)
+        sqlite3_bind_double(stmt, 4, Date().timeIntervalSince1970)
+        guard sqlite3_step(stmt) == SQLITE_DONE else { throw StoreError.exec(lastError()) }
+    }
+
+    public func reputation(hash: String) -> String? {
+        let sql = "SELECT verdict FROM reputation_cache WHERE hash=?;"
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return nil }
+        defer { sqlite3_finalize(stmt) }
+        sqlite3_bind_text(stmt, 1, hash, -1, SQL_TRANSIENT)
+        guard sqlite3_step(stmt) == SQLITE_ROW, let c = sqlite3_column_text(stmt, 0) else { return nil }
+        return String(cString: c)
     }
 }

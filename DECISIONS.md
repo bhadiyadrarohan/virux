@@ -85,4 +85,11 @@ Status: adopted.
 Membership paid by the user. Next concrete steps: (1) file the ES entitlement
 request, (2) create a Developer ID Application certificate. Until ES is
 granted, development continues on the eslogger bridge and M3 detection.
-Status: open (awaiting Apple).
+Status: DONE (see D016).
+
+## D016 | 2026-10-08 | ES entitlement request submitted
+Request ID kept in local, gitignored notes (not in this public repo). Filed as
+https://github.com/bhadiyadrarohan/virux . Apple reviews manually. Developer ID
+cert deferred to M8 packaging (a Development profile suffices for local ES
+testing). Meanwhile M3 detection proceeds with no Apple dependency.
+Status: awaiting Apple.

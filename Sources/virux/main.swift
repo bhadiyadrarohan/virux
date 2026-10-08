@@ -32,6 +32,7 @@ virux - Virux CLI (M1)
 USAGE:
   virux status [--db PATH]     Show agent health and store summary
   virux tail   [--db PATH] [-n N]   Show most recent events
+  virux detections [--db PATH] [-n N]   Show recent detections
   virux stats  [--db PATH]     Show counts by kind and disk usage
   virux hash   FILE...         Print SHA-256 for files
   virux --help
@@ -69,6 +70,9 @@ case "status":
         print("  last evt: \(fmt(h.lastEventAt))")
         print("  received: \(h.eventsReceived)  stored: \(h.eventsStored)  errors: \(h.insertErrors)")
         print("  rows:     \(h.rowCount)   db size: \(human(h.dbSizeBytes))")
+        if let d = h.detections {
+            print("  detectns: \(d)\(h.lastDetectionTitle.map { "  last: \($0)" } ?? "")")
+        }
         if let e = h.lastError { print("  last err: \(e)") }
         for n in h.notes { print("  note:     \(n)") }
     } else {
@@ -84,6 +88,17 @@ case "tail":
             let exe = e.process.executablePath.map { ($0 as NSString).lastPathComponent } ?? "?"
             let file = e.filePath.map { " -> \($0)" } ?? ""
             print("[\(fmt(e.timestamp))] #\(e.id ?? 0) \(e.kind.rawValue) pid=\(e.process.pid) \(exe)\(file)")
+        }
+    } catch { print("error: \(error)"); exit(1) }
+
+case "detections":
+    do {
+        let store = try EventStore(path: dbPath)
+        let rows = store.recentDetections(limit: limit)
+        if rows.isEmpty { print("(no detections)") }
+        for d in rows.reversed() {
+            print("[\(fmt(d.timestamp))] #\(d.id ?? 0) [\(d.severity.rawValue)/\(d.confidence.rawValue)] \(d.title)")
+            print("    \(d.reason)")
         }
     } catch { print("error: \(error)"); exit(1) }
 

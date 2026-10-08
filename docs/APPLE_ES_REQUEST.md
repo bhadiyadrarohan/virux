@@ -1,5 +1,12 @@
 # Requesting the Endpoint Security Entitlement from Apple
 
+**STATUS: SUBMITTED 2026-10-08.** Awaiting Apple review (manual; days to about
+a month). The Request ID is kept in local, non-published notes (see
+`PRIVATE_NOTES.md`, gitignored) rather than in this public repo. Next: watch
+for the ACK/approval email and, on approval, create the App ID + Additional
+Capability "Endpoint Security" and a provisioning profile
+(`docs/ENTITLEMENTS.md`).
+
 This is the critical path for the real sensor (M2). It cannot be automated;
 it needs a human signed into the Apple Developer account. This page gives the
 exact steps and ready-to-paste text.
