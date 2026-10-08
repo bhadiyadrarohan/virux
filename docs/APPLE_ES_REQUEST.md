@@ -37,7 +37,9 @@ You must be signed in with the account that owns team **Z3NP36C65D**
 1. Open the form URL, sign in as team Z3NP36C65D.
 2. Select the entitlement: **Endpoint Security client**
    (`com.apple.developer.endpoint-security.client`).
-3. Fill in developer/company details (the account already carries the name).
+3. Fill in developer/company details. Name, Email, and Organization
+   auto-populate. The **Company / Product URL** field is required; use
+   https://github.com/bhadiyadrarohan/virux .
 4. Paste the description below, adjusted if you want to name the product
    explicitly. Apple wants the use case, the platforms, and how the
    entitlement is used.
