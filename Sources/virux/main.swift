@@ -2,6 +2,7 @@ import Foundation
 import ViruxCore
 import ViruxSensor
 import ViruxIPC
+import ViruxSandbox
 
 // virux: command-line companion for the Virux agent. Reads the store and the
 // daemon health record. No privileged action.
@@ -33,6 +34,7 @@ USAGE:
   virux status [--db PATH]     Show agent health and store summary
   virux tail   [--db PATH] [-n N]   Show most recent events
   virux detections [--db PATH] [-n N]   Show recent detections
+  virux analyze FILE           Static analysis + sandbox gate for a file
   virux stats  [--db PATH]     Show counts by kind and disk usage
   virux hash   FILE...         Print SHA-256 for files
   virux --help
@@ -101,6 +103,36 @@ case "detections":
             print("    \(d.reason)")
         }
     } catch { print("error: \(error)"); exit(1) }
+
+case "analyze":
+    guard let file = files.first else { print("usage: virux analyze FILE"); exit(1) }
+    let findings: MachOFindings
+    do { findings = try MachOAnalyzer.analyze(path: file) }
+    catch { print("error: \(error)"); exit(1) }
+    print("Virux static analysis")
+    print("  file:      \(findings.path)")
+    if let h = Hashing.sha256(ofFileAt: file) { print("  sha256:    \(h)") }
+    print("  size:      \(findings.sizeBytes) bytes")
+    print("  mach-o:    \(findings.isMachO ? "yes" : "no")\(findings.isFat ? " (fat/universal)" : "")")
+    print("  arch:      \(findings.architectures.isEmpty ? "-" : findings.architectures.joined(separator: ", "))")
+    print("  type:      \(findings.fileType ?? "-")")
+    print("  signed:    \(findings.hasCodeSignature ? "yes" : "no")")
+    print("  encrypted: \(findings.isEncrypted ? "yes" : "no")")
+    print(String(format: "  entropy:   %.2f", findings.entropy))
+    if !findings.linkedLibraries.isEmpty {
+        print("  libs:      \(findings.linkedLibraries.prefix(6).joined(separator: ", "))")
+    }
+    if !findings.suspiciousStrings.isEmpty {
+        print("  strings:   \(findings.suspiciousStrings.joined(separator: ", "))")
+    }
+    print("  verdict:   \(findings.verdict.rawValue)")
+    for r in findings.reasons { print("    - \(r)") }
+    let probe = SystemResourceProbe().sample()
+    print(String(format: "  host:      free mem %.2f GB, free disk %.2f GB", probe.freeMemoryGB, probe.freeDiskGB))
+    switch ResourceGate().decide(resources: probe, activeRuns: 0) {
+    case .allow: print("  sandbox:   VM run would be allowed")
+    case .deferred(let reason): print("  sandbox:   deferred (\(reason))")
+    }
 
 case "stats":
     do {

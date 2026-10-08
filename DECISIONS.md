@@ -93,3 +93,20 @@ https://github.com/bhadiyadrarohan/virux . Apple reviews manually. Developer ID
 cert deferred to M8 packaging (a Development profile suffices for local ES
 testing). Meanwhile M3 detection proceeds with no Apple dependency.
 Status: awaiting Apple.
+
+## D017 | 2026-10-08 | M4 ships static-first orchestration; the VM backend stays an honest stub
+Build the resource gate, coordinator, evidence types, and static Mach-O
+analysis now (no disk, no RAM, no guest needed). The `VirtualizationBackend`
+reports "no guest provisioned" instead of pretending to detonate. This keeps
+the codebase truthful and makes the real backend a drop-in once a guest image
+fits. Status: adopted.
+
+## D018 | 2026-10-08 | Untrusted samples are never executed on the host
+Static analysis runs on the host; any execution happens only inside a
+disposable VM. No sample has been executed anywhere yet in this project, and
+tests use hand-crafted fixtures, not live malware. Status: adopted (safety).
+
+## D019 | 2026-10-08 | Detection/scoring lessons from M4
+Fat/universal binaries store their header big-endian (read it as such); string
+scans must flush a run ending at EOF; broad tokens like bare `http://` are
+false-positive magnets and must not be used alone. Status: adopted.

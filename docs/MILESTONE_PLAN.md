@@ -39,13 +39,20 @@ unhealthy states surfaced correctly.
 Exit tests: detections on safe fixtures; FP baseline recorded; explainability
 review.
 
-## M4 - Automated sandbox (GATED on disk + RAM)
-- Disposable macOS guest, one run at a time, 2 vCPU / ~3 GB (benchmark, revise).
-- Queued sample analysis, evidence capture, reset between samples.
-- Strict resource gating; never force-launch under pressure; failure handling.
-- Safe test corpus only (EICAR + benign simulators). Never live malware on host.
-Exit tests: isolation verified (no host effects); reset verified; resource
-gates verified; sandbox peak memory measured.
+## M4 - Automated sandbox (PARTIAL, 2026-10-08; guest gated on disk)
+Delivered and tested: `ViruxSandbox` module - `MachOAnalyzer` static inspection
+(thin + fat Mach-O, signing, encryption, dylibs, strings, entropy),
+`ResourceGate` + `SystemResourceProbe` (RAM/disk/concurrency gating),
+`SandboxCoordinator` (static-first, reset between runs), `SandboxBackend`
+protocol with an honest `VirtualizationBackend` stub and a test-only mock, and
+`virux analyze FILE`. 42 tests pass. See `M4_REPORT.md`.
+NOT done: no guest provisioned, no sample executed anywhere, no guest agent or
+virtio-socket channel, no real evidence capture. `VirtualizationBackend`
+reports "no guest provisioned" rather than faking analysis.
+Exit tests: isolation and reset verified against the mock; resource gates
+verified (real host defers: ~2.6 GB free < 4 GB). Real-guest isolation and
+sandbox peak memory remain unmeasured.
+Blockers: disk (~63 GB free) and RAM (~2.6 GB free) - see `M4_SANDBOX_OPTIONS.md`.
 
 ## M5 - Response (GATED on ES for AUTH-based denial)
 - Quarantine with metadata + audit trail; admin-gated restore/delete.
