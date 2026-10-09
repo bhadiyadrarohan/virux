@@ -505,4 +505,96 @@ public final class EventStore {
         }
         return out
     }
+
+    // MARK: - Search
+
+    private enum Bind { case text(String); case real(Double); case int(Int) }
+
+    private static let severityRankSQL =
+        "(CASE severity WHEN 'critical' THEN 4 WHEN 'high' THEN 3 WHEN 'medium' THEN 2 WHEN 'low' THEN 1 ELSE 0 END)"
+
+    /// Searchable history over events.
+    public func searchEvents(_ q: EventQuery) -> [SecurityEvent] {
+        var whereParts: [String] = []
+        var binds: [Bind] = []
+        if let since = q.since { whereParts.append("ts >= ?"); binds.append(.real(since.timeIntervalSince1970)) }
+        if let until = q.until { whereParts.append("ts <= ?"); binds.append(.real(until.timeIntervalSince1970)) }
+        if let kinds = q.kinds, !kinds.isEmpty {
+            whereParts.append("kind IN (\(Array(repeating: "?", count: kinds.count).joined(separator: ",")))")
+            for k in kinds.sorted(by: { $0.rawValue < $1.rawValue }) { binds.append(.text(k.rawValue)) }
+        }
+        if let s = q.minSeverity { whereParts.append("\(Self.severityRankSQL) >= ?"); binds.append(.int(s.rank)) }
+        if let h = q.fileHash { whereParts.append("file_hash = ?"); binds.append(.text(h)) }
+        if let p = q.pathContains { whereParts.append("file_path LIKE ?"); binds.append(.text("%\(p)%")) }
+        if let e = q.exeContains { whereParts.append("exe LIKE ?"); binds.append(.text("%\(e)%")) }
+        if let src = q.source { whereParts.append("source = ?"); binds.append(.text(src)) }
+        if let ids = q.ids, !ids.isEmpty {
+            whereParts.append("id IN (\(Array(repeating: "?", count: ids.count).joined(separator: ",")))")
+            for id in ids { binds.append(.int(Int(id))) }
+        }
+
+        var sql = """
+        SELECT id,ts,kind,pid,ppid,exe,signing_id,team_id,file_path,file_hash,severity,confidence,source,extra
+        FROM events
+        """
+        if !whereParts.isEmpty { sql += " WHERE " + whereParts.joined(separator: " AND ") }
+        sql += " ORDER BY ts DESC LIMIT ?;"
+        binds.append(.int(q.limit))
+
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return [] }
+        defer { sqlite3_finalize(stmt) }
+        bindAll(stmt, binds)
+        var out: [SecurityEvent] = []
+        while sqlite3_step(stmt) == SQLITE_ROW { out.append(rowToEvent(stmt)) }
+        return out
+    }
+
+    /// Searchable history over detections.
+    public func searchDetections(_ q: DetectionQuery) -> [Detection] {
+        var whereParts: [String] = []
+        var binds: [Bind] = []
+        if let since = q.since { whereParts.append("ts >= ?"); binds.append(.real(since.timeIntervalSince1970)) }
+        if let s = q.minSeverity { whereParts.append("\(Self.severityRankSQL) >= ?"); binds.append(.int(s.rank)) }
+        if let st = q.status { whereParts.append("status = ?"); binds.append(.text(st.rawValue)) }
+        if let t = q.titleContains { whereParts.append("title LIKE ?"); binds.append(.text("%\(t)%")) }
+        if let e = q.evidenceEventID { whereParts.append("evidence LIKE ?"); binds.append(.text("%\(e)%")) }
+
+        var sql = "SELECT id,ts,title,reason,severity,confidence,evidence,status FROM detections"
+        if !whereParts.isEmpty { sql += " WHERE " + whereParts.joined(separator: " AND ") }
+        sql += " ORDER BY ts DESC LIMIT ?;"
+        binds.append(.int(q.limit))
+
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return [] }
+        defer { sqlite3_finalize(stmt) }
+        bindAll(stmt, binds)
+        var out: [Detection] = []
+        while sqlite3_step(stmt) == SQLITE_ROW {
+            var evidence: [Int64] = []
+            if let s = text(stmt, 6), let data = s.data(using: .utf8),
+               let arr = try? JSONSerialization.jsonObject(with: data) as? [Int64] { evidence = arr }
+            out.append(Detection(
+                id: sqlite3_column_int64(stmt, 0),
+                timestamp: Date(timeIntervalSince1970: sqlite3_column_double(stmt, 1)),
+                title: text(stmt, 2) ?? "", reason: text(stmt, 3) ?? "",
+                severity: Severity(rawValue: text(stmt, 4) ?? "") ?? .none,
+                confidence: Confidence(rawValue: text(stmt, 5) ?? "") ?? .low,
+                evidenceEventIDs: evidence,
+                status: Detection.Status(rawValue: text(stmt, 7) ?? "") ?? .observed))
+        }
+        return out
+    }
+
+    private func bindAll(_ stmt: OpaquePointer?, _ binds: [Bind]) {
+        var i: Int32 = 1
+        for b in binds {
+            switch b {
+            case .text(let s): sqlite3_bind_text(stmt, i, s, -1, SQL_TRANSIENT)
+            case .real(let d): sqlite3_bind_double(stmt, i, d)
+            case .int(let n): sqlite3_bind_int64(stmt, i, Int64(n))
+            }
+            i += 1
+        }
+    }
 }

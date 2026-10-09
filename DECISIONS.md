@@ -127,3 +127,24 @@ Automatic response is allowlisted against system paths and trusted team IDs,
 rate limited (anti-mass-quarantine), and fully audited including refusals.
 Confidence does not by itself trigger containment; severity drives the action.
 Status: adopted.
+
+## D023 | 2026-10-08 | M6 keeps every report claim tied to stored evidence
+The incident report only states what the stored events show: process chain from
+pid/ppid, evidence table with event ids, impacted files and hashes, and the
+linked quarantine record. It never asserts a verdict the evidence does not
+support, and it names residual risk explicitly. Status: adopted.
+
+## D024 | 2026-10-08 | Persistence alerts are security-relevant and deduplicated
+New autostart entries always alert; modifications alert only when the plist
+references writable locations or invokes network/shell tools; removals do not
+alert. Each unique change (kind+path+hash) alerts once. Status: adopted.
+
+## D025 | 2026-10-08 | Process trees link to launchd (pid 1)
+Treating ppid 1 as a root boundary fragments the tree; link to any parent
+present in the telemetry, including pid 1, and guard against cycles. Status:
+adopted (bug fixed in M6).
+
+## D026 | 2026-10-08 | The dashboard stays a read-only view of the store
+The UI reads the store and never enforces. Containment stays in the CLI/engine
+with administrator authorisation, so a UI bug cannot quarantine anything.
+Status: adopted.

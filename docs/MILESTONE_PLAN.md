@@ -68,11 +68,20 @@ Exit tests: quarantine/restore/delete semantics, exec-bit stripping, admin gatin
 allowlist, rate limit, real process termination. PASSED.
 Remaining: real-ES containment validation once the entitlement is granted.
 
-## M6 - Forensics and UI
-- Searchable history, incident reports, process trees, relationship graphs,
-  quarantine center, startup/persistence alerts without duplicate noise.
-Exit tests: investigation flow on a seeded incident; UI responsiveness under
-load.
+## M6 - Forensics and UI (DONE 2026-10-08)
+Delivered and tested: `ViruxForensics` module - searchable history
+(`EventQuery`/`DetectionQuery`), process-tree reconstruction + ancestry, ASCII
+tree renderer, SVG relationship graph, incident report builder (markdown with
+evidence/chain/tree/containment/recommendations/residual risk), and autostart
+persistence monitoring with security-relevant, deduplicated alerts. CLI:
+`find`, `report`, `tree`, `persistence`. Dashboard rewritten as a tabbed UI
+(Overview / Detections with report view / Quarantine / Timeline). 65 tests
+pass; `verify-m6.sh` 12/12. See `M6_REPORT.md`.
+NOT done: `.app` bundle/notarization (M8); SVG graph not yet embedded in the UI;
+persistence heuristics do not verify signer of the referenced binary; no
+Notification Center delivery yet.
+Exit tests: investigation flow on fixture data, search filters, report content,
+tree/ancestry, persistence scan on the real machine. PASSED.
 
 ## M7 - Ransomware and external-drive coverage
 - Safe simulated ransomware behaviors on benign test data.
