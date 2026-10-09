@@ -136,12 +136,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if h == nil { color = .systemRed }
         else if !(h!.isFresh()) { color = .systemYellow }
         else { color = .systemGreen }
-        let s = NSMutableAttributedString(string: "V ", attributes: [
-            .foregroundColor: NSColor.labelColor,
-            .font: NSFont.boldSystemFont(ofSize: 13)
+
+        if let logo = Self.logoImage {
+            button.image = logo
+            button.imagePosition = .imageLeading
+            button.attributedTitle = Self.dot(color)
+        } else {
+            // Fallback if the bundled icon is missing
+            button.image = nil
+            let s = NSMutableAttributedString(string: "V", attributes: [
+                .foregroundColor: NSColor.labelColor,
+                .font: NSFont.boldSystemFont(ofSize: 13)
+            ])
+            s.append(Self.dot(color))
+            button.attributedTitle = s
+        }
+    }
+
+    /// The Virux V mark, loaded from the bundled PNG and used as a template so
+    /// macOS tints it correctly in light and dark menu bars.
+    static let logoImage: NSImage? = {
+        guard let img = Bundle.module.image(forResource: "MenuBarIcon") else { return nil }
+        img.isTemplate = true
+        img.size = NSSize(width: 20, height: 12)
+        return img
+    }()
+
+    static func dot(_ color: NSColor) -> NSAttributedString {
+        NSAttributedString(string: " \u{25CF}", attributes: [
+            .foregroundColor: color,
+            .font: NSFont.systemFont(ofSize: 9)
         ])
-        s.append(NSAttributedString(string: "\u{25CF}", attributes: [.foregroundColor: color]))
-        button.attributedTitle = s
     }
 
     @objc func toggle() {
@@ -163,7 +188,7 @@ app.setActivationPolicy(.accessory)
 // launches, builds its status item, then exits. Used by the M1 test script.
 if let s = ProcessInfo.processInfo.environment["VIRUX_UI_SELFTEST_SECONDS"], let n = Double(s) {
     DispatchQueue.main.asyncAfter(deadline: .now() + n) {
-        FileHandle.standardError.write("ViruxMenuBar: selftest window elapsed, exiting 0\n".data(using: .utf8)!)
+        FileHandle.standardError.write("ViruxMenuBar: selftest elapsed (logoLoaded=\(AppDelegate.logoImage != nil)), exiting 0\n".data(using: .utf8)!)
         NSApplication.shared.terminate(nil)
     }
 }
