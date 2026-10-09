@@ -99,6 +99,32 @@ public final class EventStore {
           detail TEXT,
           updated_at REAL NOT NULL
         );
+        CREATE TABLE IF NOT EXISTS quarantine (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          ts REAL NOT NULL,
+          original_path TEXT NOT NULL,
+          quarantine_path TEXT NOT NULL,
+          sha256 TEXT,
+          size_bytes INTEGER,
+          reason TEXT NOT NULL,
+          detection_id INTEGER,
+          signing_id TEXT,
+          team_id TEXT,
+          perms INTEGER,
+          status TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_quarantine_status ON quarantine(status);
+        CREATE INDEX IF NOT EXISTS idx_quarantine_hash ON quarantine(sha256);
+        CREATE TABLE IF NOT EXISTS audit (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          ts REAL NOT NULL,
+          action TEXT NOT NULL,
+          actor TEXT NOT NULL,
+          target TEXT,
+          detail TEXT,
+          ok INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_audit_ts ON audit(ts);
         """)
         try setMeta("schema_version", String(EventStore.schemaVersion))
     }
@@ -364,5 +390,119 @@ public final class EventStore {
         sqlite3_bind_text(stmt, 1, hash, -1, SQL_TRANSIENT)
         guard sqlite3_step(stmt) == SQLITE_ROW, let c = sqlite3_column_text(stmt, 0) else { return nil }
         return String(cString: c)
+    }
+
+    // MARK: - Quarantine
+
+    @discardableResult
+    public func insertQuarantine(_ q: QuarantineRecord) throws -> Int64 {
+        let sql = """
+        INSERT INTO quarantine
+          (ts,original_path,quarantine_path,sha256,size_bytes,reason,detection_id,signing_id,team_id,perms,status)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?);
+        """
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { throw StoreError.exec(lastError()) }
+        defer { sqlite3_finalize(stmt) }
+        sqlite3_bind_double(stmt, 1, q.timestamp.timeIntervalSince1970)
+        sqlite3_bind_text(stmt, 2, q.originalPath, -1, SQL_TRANSIENT)
+        sqlite3_bind_text(stmt, 3, q.quarantinePath, -1, SQL_TRANSIENT)
+        bindOptionalText(stmt, 4, q.sha256)
+        bindOptionalInt(stmt, 5, q.sizeBytes)
+        sqlite3_bind_text(stmt, 6, q.reason, -1, SQL_TRANSIENT)
+        bindOptionalInt(stmt, 7, q.detectionID)
+        bindOptionalText(stmt, 8, q.signingID)
+        bindOptionalText(stmt, 9, q.teamID)
+        if let p = q.perms { sqlite3_bind_int64(stmt, 10, Int64(p)) } else { sqlite3_bind_null(stmt, 10) }
+        sqlite3_bind_text(stmt, 11, q.status.rawValue, -1, SQL_TRANSIENT)
+        guard sqlite3_step(stmt) == SQLITE_DONE else { throw StoreError.exec(lastError()) }
+        return sqlite3_last_insert_rowid(db)
+    }
+
+    public func listQuarantine(status: QuarantineRecord.Status? = nil) -> [QuarantineRecord] {
+        var sql = "SELECT id,ts,original_path,quarantine_path,sha256,size_bytes,reason,detection_id,signing_id,team_id,perms,status FROM quarantine"
+        if status != nil { sql += " WHERE status=?" }
+        sql += " ORDER BY id DESC;"
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return [] }
+        defer { sqlite3_finalize(stmt) }
+        if let s = status { sqlite3_bind_text(stmt, 1, s.rawValue, -1, SQL_TRANSIENT) }
+        var out: [QuarantineRecord] = []
+        while sqlite3_step(stmt) == SQLITE_ROW { out.append(rowToQuarantine(stmt)) }
+        return out
+    }
+
+    public func quarantine(id: Int64) -> QuarantineRecord? {
+        let sql = "SELECT id,ts,original_path,quarantine_path,sha256,size_bytes,reason,detection_id,signing_id,team_id,perms,status FROM quarantine WHERE id=?;"
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return nil }
+        defer { sqlite3_finalize(stmt) }
+        sqlite3_bind_int64(stmt, 1, id)
+        guard sqlite3_step(stmt) == SQLITE_ROW else { return nil }
+        return rowToQuarantine(stmt)
+    }
+
+    public func updateQuarantineStatus(id: Int64, status: QuarantineRecord.Status) throws {
+        let sql = "UPDATE quarantine SET status=? WHERE id=?;"
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { throw StoreError.exec(lastError()) }
+        defer { sqlite3_finalize(stmt) }
+        sqlite3_bind_text(stmt, 1, status.rawValue, -1, SQL_TRANSIENT)
+        sqlite3_bind_int64(stmt, 2, id)
+        guard sqlite3_step(stmt) == SQLITE_DONE else { throw StoreError.exec(lastError()) }
+    }
+
+    private func rowToQuarantine(_ stmt: OpaquePointer?) -> QuarantineRecord {
+        QuarantineRecord(
+            id: sqlite3_column_int64(stmt, 0),
+            timestamp: Date(timeIntervalSince1970: sqlite3_column_double(stmt, 1)),
+            originalPath: text(stmt, 2) ?? "",
+            quarantinePath: text(stmt, 3) ?? "",
+            sha256: text(stmt, 4),
+            sizeBytes: sqlite3_column_type(stmt, 5) == SQLITE_NULL ? nil : sqlite3_column_int64(stmt, 5),
+            reason: text(stmt, 6) ?? "",
+            detectionID: sqlite3_column_type(stmt, 7) == SQLITE_NULL ? nil : sqlite3_column_int64(stmt, 7),
+            signingID: text(stmt, 8),
+            teamID: text(stmt, 9),
+            perms: sqlite3_column_type(stmt, 10) == SQLITE_NULL ? nil : Int(sqlite3_column_int64(stmt, 10)),
+            status: QuarantineRecord.Status(rawValue: text(stmt, 11) ?? "") ?? .quarantined)
+    }
+
+    // MARK: - Audit
+
+    @discardableResult
+    public func appendAudit(_ a: AuditEntry) throws -> Int64 {
+        let sql = "INSERT INTO audit (ts,action,actor,target,detail,ok) VALUES (?,?,?,?,?,?);"
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { throw StoreError.exec(lastError()) }
+        defer { sqlite3_finalize(stmt) }
+        sqlite3_bind_double(stmt, 1, a.timestamp.timeIntervalSince1970)
+        sqlite3_bind_text(stmt, 2, a.action, -1, SQL_TRANSIENT)
+        sqlite3_bind_text(stmt, 3, a.actor, -1, SQL_TRANSIENT)
+        bindOptionalText(stmt, 4, a.target)
+        bindOptionalText(stmt, 5, a.detail)
+        sqlite3_bind_int(stmt, 6, a.ok ? 1 : 0)
+        guard sqlite3_step(stmt) == SQLITE_DONE else { throw StoreError.exec(lastError()) }
+        return sqlite3_last_insert_rowid(db)
+    }
+
+    public func recentAudit(limit: Int = 50) -> [AuditEntry] {
+        let sql = "SELECT id,ts,action,actor,target,detail,ok FROM audit ORDER BY id DESC LIMIT ?;"
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return [] }
+        defer { sqlite3_finalize(stmt) }
+        sqlite3_bind_int(stmt, 1, Int32(limit))
+        var out: [AuditEntry] = []
+        while sqlite3_step(stmt) == SQLITE_ROW {
+            out.append(AuditEntry(
+                id: sqlite3_column_int64(stmt, 0),
+                timestamp: Date(timeIntervalSince1970: sqlite3_column_double(stmt, 1)),
+                action: text(stmt, 2) ?? "",
+                actor: text(stmt, 3) ?? "",
+                target: text(stmt, 4),
+                detail: text(stmt, 5),
+                ok: sqlite3_column_int(stmt, 6) != 0))
+        }
+        return out
     }
 }

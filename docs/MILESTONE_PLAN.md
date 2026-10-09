@@ -54,13 +54,19 @@ verified (real host defers: ~2.6 GB free < 4 GB). Real-guest isolation and
 sandbox peak memory remain unmeasured.
 Blockers: disk (~63 GB free) and RAM (~2.6 GB free) - see `M4_SANDBOX_OPTIONS.md`.
 
-## M5 - Response (GATED on ES for AUTH-based denial)
-- Quarantine with metadata + audit trail; admin-gated restore/delete.
-- High/critical containment (terminate, isolate).
-- Network containment via Network Extension content filter.
-- Safe system-process exclusions; audit logs; anti-mass-quarantine guard.
-Exit tests: system processes unaffected; quarantine reversible; every action
-audited.
+## M5 - Response (PARTIAL, 2026-10-08; no-entitlement subset done)
+Delivered and tested: `ViruxRespond` module - `QuarantineStore` (move + clear
+exec bits + metadata + sidecar), `AuditLog`, `AdminGate` (Authorization
+Services, fails closed), `ProcessTerminator`, `ResponseEngine` (severity to
+action, system/trusted allowlist, anti-mass rate limit). Store `quarantine` +
+`audit` tables. CLI: `quarantine`, `quarantine-add`, `quarantine-restore`,
+`quarantine-delete`, `audit`. See `M5_REPORT.md`.
+DEFERRED: ES AUTH execution denial (Apple entitlement); network containment
+(Network Extension content filter, separate self-service entitlement).
+DEFERRED to hardening: root-privileged termination of other users' processes.
+Exit tests: quarantine/restore/delete semantics, exec-bit stripping, admin gating,
+allowlist, rate limit, real process termination. PASSED.
+Remaining: real-ES containment validation once the entitlement is granted.
 
 ## M6 - Forensics and UI
 - Searchable history, incident reports, process trees, relationship graphs,

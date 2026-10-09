@@ -110,3 +110,20 @@ tests use hand-crafted fixtures, not live malware. Status: adopted (safety).
 Fat/universal binaries store their header big-endian (read it as such); string
 scans must flush a run ending at EOF; broad tokens like bare `http://` are
 false-positive magnets and must not be used alone. Status: adopted.
+
+## D020 | 2026-10-08 | M5 quarantine prevents execution by relocation, not by a kernel block
+Without the ES entitlement there is no inline execution denial. Quarantine MOVES
+the file into a 0700 store and clears its execute bits, which stops future
+launches from the original path. This is honest containment; the inline AUTH
+block is explicitly deferred. Status: adopted.
+
+## D021 | 2026-10-08 | Admin authorisation uses Authorization Services and fails closed
+Restore and delete require the OS administrator prompt (`SecurityAdminGate`).
+If it cannot prompt (headless/non-GUI) it denies. Tests use `MockAdminGate`.
+Status: adopted.
+
+## D022 | 2026-10-08 | Safe-defaults for automatic response
+Automatic response is allowlisted against system paths and trusted team IDs,
+rate limited (anti-mass-quarantine), and fully audited including refusals.
+Confidence does not by itself trigger containment; severity drives the action.
+Status: adopted.

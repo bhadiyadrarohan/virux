@@ -3,6 +3,7 @@ import ViruxCore
 import ViruxSensor
 import ViruxIPC
 import ViruxSandbox
+import ViruxRespond
 
 // virux: command-line companion for the Virux agent. Reads the store and the
 // daemon health record. No privileged action.
@@ -10,6 +11,10 @@ import ViruxSandbox
 func defaultDBPath() -> String {
     let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
     return base.appendingPathComponent("Virux/events.db").path
+}
+
+func quarantineDir(forDB dbPath: String) -> String {
+    ((dbPath as NSString).deletingLastPathComponent as NSString).appendingPathComponent("Quarantine")
 }
 
 func human(_ bytes: Int64) -> String {
@@ -35,6 +40,11 @@ USAGE:
   virux tail   [--db PATH] [-n N]   Show most recent events
   virux detections [--db PATH] [-n N]   Show recent detections
   virux analyze FILE           Static analysis + sandbox gate for a file
+  virux quarantine             List quarantined files
+  virux quarantine-add FILE REASON   Move a file to quarantine (user initiated)
+  virux quarantine-restore ID  Restore a file (requires admin authorization)
+  virux quarantine-delete ID   Permanently delete (requires admin authorization)
+  virux audit [-n N]           Show the audit trail
   virux stats  [--db PATH]     Show counts by kind and disk usage
   virux hash   FILE...         Print SHA-256 for files
   virux --help
@@ -133,6 +143,57 @@ case "analyze":
     case .allow: print("  sandbox:   VM run would be allowed")
     case .deferred(let reason): print("  sandbox:   deferred (\(reason))")
     }
+
+case "quarantine":
+    do {
+        let store = try EventStore(path: dbPath)
+        let qs = try QuarantineStore(directory: quarantineDir(forDB: dbPath), store: store)
+        let rows = qs.list()
+        if rows.isEmpty { print("(quarantine empty)") }
+        for q in rows {
+            print("#\(q.id ?? 0) [\(q.status.rawValue)] \(q.originalPath)")
+            print("    sha256: \(q.sha256 ?? "?")")
+            print("    reason: \(q.reason)")
+        }
+    } catch { print("error: \(error)"); exit(1) }
+
+case "quarantine-add":
+    guard files.count >= 2 else { print("usage: virux quarantine-add FILE REASON"); exit(1) }
+    let target = files[0]
+    let reason = files.dropFirst().joined(separator: " ")
+    do {
+        let store = try EventStore(path: dbPath)
+        let qs = try QuarantineStore(directory: quarantineDir(forDB: dbPath), store: store)
+        let rec = try qs.quarantine(filePath: target, reason: reason, actor: "user")
+        print("quarantined #\(rec.id ?? 0): \(rec.originalPath)")
+        print("  -> \(rec.quarantinePath)")
+        print("  sha256: \(rec.sha256 ?? "?")  exec bit cleared")
+    } catch { print("error: \(error)"); exit(1) }
+
+case "quarantine-restore", "quarantine-delete":
+    guard let idStr = files.first, let id = Int64(idStr) else { print("usage: virux \(command) ID"); exit(1) }
+    do {
+        let store = try EventStore(path: dbPath)
+        let qs = try QuarantineStore(directory: quarantineDir(forDB: dbPath), store: store)
+        let gate = SecurityAdminGate()
+        if command == "quarantine-restore" {
+            let rec = try qs.restore(id: id, gate: gate)
+            print("restored #\(rec.id ?? 0) to \(rec.originalPath)")
+        } else {
+            let rec = try qs.delete(id: id, gate: gate)
+            print("deleted #\(rec.id ?? 0) (was \(rec.originalPath))")
+        }
+    } catch { print("error: \(error)"); exit(1) }
+
+case "audit":
+    do {
+        let store = try EventStore(path: dbPath)
+        let rows = store.recentAudit(limit: limit)
+        if rows.isEmpty { print("(no audit entries)") }
+        for a in rows.reversed() {
+            print("[\(fmt(a.timestamp))] \(a.ok ? "ok " : "ERR") \(a.action) (\(a.actor))\(a.target.map { " \($0)" } ?? "")\(a.detail.map { " :: \($0)" } ?? "")")
+        }
+    } catch { print("error: \(error)"); exit(1) }
 
 case "stats":
     do {
