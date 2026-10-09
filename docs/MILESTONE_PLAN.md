@@ -83,11 +83,22 @@ Notification Center delivery yet.
 Exit tests: investigation flow on fixture data, search filters, report content,
 tree/ancestry, persistence scan on the real machine. PASSED.
 
-## M7 - Ransomware and external-drive coverage
+## M7 - Ransomware and external-drive coverage  [DONE 2026-10-08]
 - Safe simulated ransomware behaviors on benign test data.
 - External-drive on-connect lightweight checks + event-driven prioritization.
-Exit tests: containment on simulation; no heavy full-volume scan; drive
-monitoring accuracy.
+Built: `ViruxCoverage` (canary/decoy files, volume enumeration + bounded
+on-connect scan, impact summary, safe ransomware simulator); rules R-006
+(backup/snapshot tampering), R-007 (canary touched, critical/high), R-008 (mass
+modification burst); CLI `canary` / `volumes` / `impact` / `sim-ransomware`;
+the daemon now loads the canary manifest so R-007 fires on live telemetry.
+79 tests pass; `verify-m7.sh` 22/22. See `M7_REPORT.md`.
+NOT done: scheduled canary integrity sweep; live mount-notification loop (the
+volume diff is implemented and tested but not yet polled by the daemon); R-008
+cannot tell a read from a write without ES flags (M2); no recovery path (no
+backup infrastructure exists on this machine).
+Exit tests: containment on simulation (R-005/R-007/R-008 fire, canary
+quarantined); on-connect scan flags autorun/shortcuts/hidden executables inside
+budget; canary detection confirmed end to end through the daemon. PASSED.
 
 ## M8 - Hardening and performance
 - Fault injection (crash, full disk, VM failure, offline).

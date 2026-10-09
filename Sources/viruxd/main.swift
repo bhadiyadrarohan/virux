@@ -4,6 +4,7 @@ import ViruxCore
 import ViruxSensor
 import ViruxIPC
 import ViruxDetect
+import ViruxCoverage
 
 // viruxd: the Virux background agent skeleton (M1). It consumes telemetry from
 // an EventSource, stores it in the local SQLite store, and publishes a health
@@ -79,7 +80,17 @@ do {
 
 let healthPath = Health.defaultPath(dbPath: dbPath)
 let startedAt = Date()
-let pipeline = DetectionPipeline(store: store, hashExecImages: true)
+
+// M7: load decoy (canary) files so a touch fires rule R-007 on live telemetry.
+let canaryManifest = ((dbPath as NSString).deletingLastPathComponent as NSString)
+    .appendingPathComponent("canaries.json")
+let canaries = CanaryManager(manifestPath: canaryManifest)
+let pipeline = DetectionPipeline(store: store,
+                                 engine: RuleEngine(config: RuleEngine.Config(canaryPaths: canaries.paths)),
+                                 hashExecImages: true)
+if !canaries.paths.isEmpty {
+    FileHandle.standardError.write(Data("viruxd: \(canaries.paths.count) canary file(s) under watch\n".utf8))
+}
 
 final class Counters {
     let lock = NSLock()

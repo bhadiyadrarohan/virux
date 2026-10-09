@@ -148,3 +148,22 @@ adopted (bug fixed in M6).
 The UI reads the store and never enforces. Containment stays in the CLI/engine
 with administrator authorisation, so a UI bug cannot quarantine anything.
 Status: adopted.
+
+## D027 | 2026-10-08 | Canary (decoy) files are the high-confidence ransomware anchor
+A canary file has no legitimate writer, so any open/rename/unlink on one is
+critical severity with high confidence and can drive automatic containment
+without waiting for a false-positive baseline. Canaries are opt-in per directory
+via `virux canary plant`. Status: adopted.
+
+## D028 | 2026-10-08 | The ransomware simulator refuses non-temp workspaces
+`RansomwareSimulator.run` standardises the workspace path and refuses any path
+outside the system temp directory before touching a single file. A bug can
+therefore never rename or overwrite real data, and the guard is covered by a
+test. Status: adopted.
+
+## D029 | 2026-10-08 | Canary paths are normalised, not compared literally
+Path spelling varies between telemetry and user input (redundant slashes,
+trailing separator, the `/private` alias). Canary keys are normalised once at
+engine construction, and an event path is accepted in both `/x` and `/private/x`
+spellings. Symlink and hardlink aliases remain unmatched and are documented
+residual risk. Status: adopted (bug found by the M7 live daemon test).

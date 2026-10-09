@@ -9,10 +9,14 @@ dependency.
 
 ## Status
 
-Milestone: **M0 complete (discovery and feasibility)**.
-No protection is active. No privileged component, sensor, or response
-capability has been installed or run. Everything below is a plan plus a
-read-only audit of this machine.
+Milestone status: **M0, M1, M3, M6, M7 complete**; **M5 complete within its
+no-Apple-entitlement scope**; **M4 partial** (static analysis works, guest
+detonation is disk-gated); **M2 blocked** on Apple's Endpoint Security
+entitlement (request submitted, under review).
+
+79 automated tests pass. No privileged component has been installed, and no
+malware is used anywhere: every test runs on benign fixtures in a temp
+directory. See `docs/M7_REPORT.md` for the current milestone.
 
 ## Read this first
 

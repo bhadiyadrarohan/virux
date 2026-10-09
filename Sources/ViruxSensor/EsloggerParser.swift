@@ -52,6 +52,9 @@ public enum EsloggerParser {
             extra["proc_exe"] = p
         }
 
+        // Fallback: some producers emit the target path at the top level.
+        if filePath == nil, let p = pathFromFile(obj) { filePath = p }
+
         return SecurityEvent(
             timestamp: timestamp,
             kind: kind,

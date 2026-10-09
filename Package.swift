@@ -12,6 +12,7 @@ let package = Package(
         .library(name: "ViruxSandbox", targets: ["ViruxSandbox"]),
         .library(name: "ViruxRespond", targets: ["ViruxRespond"]),
         .library(name: "ViruxForensics", targets: ["ViruxForensics"]),
+        .library(name: "ViruxCoverage", targets: ["ViruxCoverage"]),
         .executable(name: "viruxd", targets: ["viruxd"]),
         .executable(name: "virux", targets: ["virux"]),
         .executable(name: "ViruxMenuBar", targets: ["ViruxMenuBar"]),
@@ -24,8 +25,9 @@ let package = Package(
         .target(name: "ViruxSandbox", dependencies: ["ViruxCore", "ViruxDetect"]),
         .target(name: "ViruxRespond", dependencies: ["ViruxCore"]),
         .target(name: "ViruxForensics", dependencies: ["ViruxCore", "ViruxDetect", "ViruxRespond", "ViruxSandbox"]),
-        .executableTarget(name: "viruxd", dependencies: ["ViruxCore", "ViruxSensor", "ViruxIPC", "ViruxDetect"]),
-        .executableTarget(name: "virux", dependencies: ["ViruxCore", "ViruxSensor", "ViruxIPC", "ViruxDetect", "ViruxSandbox", "ViruxRespond", "ViruxForensics"]),
+        .target(name: "ViruxCoverage", dependencies: ["ViruxCore", "ViruxDetect", "ViruxRespond"]),
+        .executableTarget(name: "viruxd", dependencies: ["ViruxCore", "ViruxSensor", "ViruxIPC", "ViruxDetect", "ViruxCoverage"]),
+        .executableTarget(name: "virux", dependencies: ["ViruxCore", "ViruxSensor", "ViruxIPC", "ViruxDetect", "ViruxSandbox", "ViruxRespond", "ViruxForensics", "ViruxCoverage"]),
         .executableTarget(name: "ViruxMenuBar", dependencies: ["ViruxCore", "ViruxIPC", "ViruxForensics", "ViruxRespond", "ViruxSandbox"],
                           resources: [.process("Resources")]),
         .testTarget(name: "ViruxCoreTests", dependencies: ["ViruxCore"]),
@@ -34,5 +36,6 @@ let package = Package(
         .testTarget(name: "ViruxSandboxTests", dependencies: ["ViruxSandbox"]),
         .testTarget(name: "ViruxRespondTests", dependencies: ["ViruxRespond"]),
         .testTarget(name: "ViruxForensicsTests", dependencies: ["ViruxForensics"]),
+        .testTarget(name: "ViruxCoverageTests", dependencies: ["ViruxCoverage"]),
     ]
 )

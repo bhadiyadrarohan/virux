@@ -5,6 +5,7 @@ import ViruxIPC
 import ViruxSandbox
 import ViruxRespond
 import ViruxForensics
+import ViruxCoverage
 
 // virux: command-line companion for the Virux agent. Reads the store and the
 // daemon health record. No privileged action.
@@ -69,6 +70,12 @@ USAGE:
   virux report DETECTION_ID    Full incident report (markdown)
   virux tree [--pid P] [--since T]   Process tree or ancestry
   virux persistence            Scan autostart locations for suspicious entries
+  virux canary plant DIR...    Plant decoy (canary) files in a directory
+  virux canary check           Check canaries; exit code 2 if any changed or missing
+  virux canary                 List planted canaries
+  virux volumes [PATH]         List mounted volumes; optionally on-connect scan PATH
+  virux impact [--path P] [--since T]   Files potentially affected in a window
+  virux sim-ransomware         Safe simulated ransomware test on benign fixtures only
   virux stats  [--db PATH]     Show counts by kind and disk usage
   virux hash   FILE...         Print SHA-256 for files
   virux --help
@@ -295,6 +302,83 @@ case "persistence":
     }
     let suspicious = snap.items.filter { $0.suspicious }.map { PersistenceChange(kind: .added, item: $0) }
     for a in monitor.alerts(for: suspicious) { print("  alert [\(a.severity.rawValue)] \(a.message)") }
+
+case "canary":
+    let sub = files.first ?? "list"
+    let manifest = ((dbPath as NSString).deletingLastPathComponent as NSString).appendingPathComponent("canaries.json")
+    let cm = CanaryManager(manifestPath: manifest)
+    switch sub {
+    case "plant":
+        let dirs = Array(files.dropFirst())
+        guard !dirs.isEmpty else { print("usage: virux canary plant DIR [DIR...]"); exit(1) }
+        do {
+            for d in dirs { for c in try cm.plant(inDirectory: d) { print("planted \(c.path)") } }
+        } catch { print("error: \(error)"); exit(1) }
+    case "check":
+        let findings = cm.check()
+        if findings.isEmpty { print("(no canaries planted)") }
+        var alarm = false
+        for f in findings {
+            switch f.status {
+            case .intact: print("  ok       \(f.canary.path)")
+            case .missing: print("  MISSING  \(f.canary.path)"); alarm = true
+            case .modified(let r): print("  CHANGED  \(f.canary.path) (\(r))"); alarm = true
+            }
+        }
+        if alarm { exit(2) }
+    default:
+        if cm.canaries.isEmpty { print("(no canaries planted)") }
+        for c in cm.canaries { print(c.path) }
+    }
+
+case "volumes":
+    let vols = VolumeLister.mounted()
+    if vols.isEmpty { print("(no mounted volumes)") }
+    for v in vols {
+        let kind = v.isRemovable ? "removable" : (v.isInternal ? "internal" : "external")
+        print("\(v.path)  [\(kind)]  free \(human(v.freeBytes)) / \(human(v.totalBytes))")
+    }
+    if let scanPath = files.first {
+        let v = vols.first { $0.path == scanPath }
+            ?? VolumeInfo(path: scanPath, name: (scanPath as NSString).lastPathComponent,
+                          isRemovable: false, isInternal: false, totalBytes: 0, freeBytes: 0)
+        let r = OnConnectScanner().scan(volume: v)
+        print("on-connect scan of \(scanPath): \(r.entriesSeen) entries in \(String(format: "%.2f", r.durationSeconds))s\(r.truncated ? " (truncated: budget reached)" : "")")
+        print("  executables: \(r.executables.count)")
+        for a in r.suspiciousArtifacts { print("  SUSPICIOUS [\(a.kind)] \(a.path): \(a.reason)") }
+    }
+
+case "impact":
+    do {
+        let store = try EventStore(path: dbPath)
+        let since = sinceStr.flatMap(parseSince) ?? Date().addingTimeInterval(-86400)
+        var q = EventQuery(since: since, limit: 20000)
+        if let p = pathFilter { q.pathContains = p }
+        let s = ImpactTracker.summarize(events: store.searchEvents(q))
+        print("potentially affected files: \(s.totalAffected)")
+        print("by directory:")
+        for (d, c) in s.byDirectory.prefix(10) { print("  \(c)\t\(d)") }
+        print("by extension:")
+        for (e, c) in s.byExtension.prefix(10) { print("  \(c)\t.\(e)") }
+    } catch { print("error: \(error)"); exit(1) }
+
+case "sim-ransomware":
+    do {
+        let store = try EventStore(path: dbPath)
+        let ws = (NSTemporaryDirectory() as NSString).appendingPathComponent("virux-sim-\(UUID().uuidString)")
+        let res = try RansomwareSimulator.run(workspace: ws, fileCount: 60, store: store)
+        print("safe ransomware simulation (benign fixtures only, inside a temp workspace)")
+        print("  workspace: \(res.workspace)")
+        print("  fixtures:  \(res.fixturesCreated)   simulated renames: \(res.filesRenamed)")
+        print("  detections:")
+        for d in res.detections { print("    [\(d.severity.rawValue)] \(d.ruleID) \(d.title)") }
+        if let q = res.quarantinedPath {
+            print("  contained: canary quarantined -> \(q) (#\(res.quarantineID ?? 0))")
+        } else {
+            print("  contained: NO (canary was not quarantined)")
+        }
+        print("  summary: \(res.summary)")
+    } catch { print("error: \(error)"); exit(1) }
 
 case "stats":
     do {
