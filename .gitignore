@@ -10,3 +10,6 @@
 PRIVATE_NOTES.md
 *.local.md
 SECURITY.local.md
+
+# Local management reports (not published)
+reports/
